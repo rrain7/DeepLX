@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"golang.org/x/time/rate"
 )
 
 func init() {
@@ -95,6 +97,15 @@ type ResData struct {
 	TransText  string `json:"text"`
 	SourceLang string `json:"source_lang"`
 	TargetLang string `json:"target_lang"`
+}
+
+// 限制一分钟十次请求
+var limiter = rate.NewLimiter(10, 1)
+var client = &http.Client{
+	Transport: &rateLimitedTransport{
+		rt: http.DefaultTransport,
+		rl: limiter,	
+	},
 }
 
 func main() {
@@ -183,11 +194,10 @@ func main() {
 			request.Header.Set("x-app-version", "2.6")
 			request.Header.Set("Connection", "keep-alive")
 
-			client := &http.Client{}
-			resp, err := client.Do(request)
+			resp, err := rateLimitRequest(request)
 			if err != nil {
-				log.Println(err)
-				return
+				log.Println("send translate request error: ", err)
+				return	
 			}
 			defer resp.Body.Close()
 
@@ -226,4 +236,45 @@ func main() {
 		}
 	})
 	r.Run(":1188") // listen and serve on 0.0.0.0:1188
+}
+
+
+type rateLimitedTransport struct {
+    rt http.RoundTripper
+    rl *rate.Limiter
+}
+
+
+// rateLimitRequest 限制请求发送
+func rateLimitRequest(request *http.Request) (*http.Response, error) {
+	if !limiter.Allow() {
+		log.Println("rate limit reached")
+		return nil, nil
+	}
+
+	err := limiter.Wait(context.Background())
+	if err != nil {
+		log.Println("rate limit error:", err)
+	}
+
+	resp, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+
+
+func (t *rateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+    // wait for the limiter to allow the request
+    ctx := req.Context()
+    err := t.rl.Wait(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    // make the HTTP request using the underlying transport
+    return t.rt.RoundTrip(req)
 }

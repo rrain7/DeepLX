@@ -11,6 +11,7 @@
 # DeepL X
 Permanently free DeepL API written in Golang
 
+> I use it in [Immersive Translate](https://github.com/immersive-translate/immersive-translate), but the deeplx plugin often return 429, such as the [issue](https://github.com/OwO-Network/DeepLX/issues/30), I want solve it and use it for myself. So, I fork the repo and want use it for reading English PDF file.
 ## Description
 - `deeplx` in only run in port `1188`, later versions will do the specified port.
 - `deeplx` is listening to `0.0.0.0:1188` by default.
