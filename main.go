@@ -100,8 +100,8 @@ type ResData struct {
 	TargetLang string `json:"target_lang"`
 }
 
-
-var limiter = rate.NewLimiter(forEvery(10, time.Minute), 1)
+// 
+var limiter = rate.NewLimiter(forEvery(12, time.Minute), 12)
 
 
 func forEvery(eventCount int, duration time.Duration) rate.Limit {
@@ -204,7 +204,10 @@ func main() {
 			resp, err := rateLimitRequest(request)
 			if err != nil {
 				log.Println("send translate request error: ", err)
-				return	
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"code":    http.StatusTooManyRequests,
+					"message": "rate limit exceeded",
+				})
 			}
 			defer resp.Body.Close()
 
@@ -254,10 +257,6 @@ type rateLimitedTransport struct {
 
 // rateLimitRequest 限制请求发送
 func rateLimitRequest(request *http.Request) (*http.Response, error) {
-	if !limiter.Allow() {
-		return nil, errors.New("rate limit reached")
-	}
-
 	err := limiter.Wait(context.Background())
 	if err != nil {
 		log.Println("rate limit error:", err)
@@ -271,7 +270,6 @@ func rateLimitRequest(request *http.Request) (*http.Response, error) {
 
 	return resp, nil
 }
-
 
 
 func (t *rateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
