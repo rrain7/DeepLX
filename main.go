@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -99,8 +100,14 @@ type ResData struct {
 	TargetLang string `json:"target_lang"`
 }
 
-// 限制一分钟十次请求
-var limiter = rate.NewLimiter(10, 1)
+
+var limiter = rate.NewLimiter(forEvery(10, time.Minute), 1)
+
+
+func forEvery(eventCount int, duration time.Duration) rate.Limit {
+	return rate.Every(duration / time.Duration(eventCount))
+}
+
 var client = &http.Client{
 	Transport: &rateLimitedTransport{
 		rt: http.DefaultTransport,
@@ -248,13 +255,13 @@ type rateLimitedTransport struct {
 // rateLimitRequest 限制请求发送
 func rateLimitRequest(request *http.Request) (*http.Response, error) {
 	if !limiter.Allow() {
-		log.Println("rate limit reached")
-		return nil, nil
+		return nil, errors.New("rate limit reached")
 	}
 
 	err := limiter.Wait(context.Background())
 	if err != nil {
 		log.Println("rate limit error:", err)
+		return nil, errors.New("rate limit error")
 	}
 
 	resp, err := client.Do(request)
