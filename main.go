@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -100,9 +99,7 @@ type ResData struct {
 	TargetLang string `json:"target_lang"`
 }
 
-// 
 var limiter = rate.NewLimiter(forEvery(12, time.Minute), 12)
-
 
 func forEvery(eventCount int, duration time.Duration) rate.Limit {
 	return rate.Every(duration / time.Duration(eventCount))
@@ -111,7 +108,7 @@ func forEvery(eventCount int, duration time.Duration) rate.Limit {
 var client = &http.Client{
 	Transport: &rateLimitedTransport{
 		rt: http.DefaultTransport,
-		rl: limiter,	
+		rl: limiter,
 	},
 }
 
@@ -248,20 +245,14 @@ func main() {
 	r.Run(":1188") // listen and serve on 0.0.0.0:1188
 }
 
-
 type rateLimitedTransport struct {
-    rt http.RoundTripper
-    rl *rate.Limiter
+	rt http.RoundTripper
+	rl *rate.Limiter
 }
-
 
 // rateLimitRequest 限制请求发送
 func rateLimitRequest(request *http.Request) (*http.Response, error) {
-	err := limiter.Wait(context.Background())
-	if err != nil {
-		log.Println("rate limit error:", err)
-		return nil, errors.New("rate limit error")
-	}
+	limiter.Wait(context.Background())
 
 	resp, err := client.Do(request)
 	if err != nil {
@@ -271,15 +262,14 @@ func rateLimitRequest(request *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-
 func (t *rateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-    // wait for the limiter to allow the request
-    ctx := req.Context()
-    err := t.rl.Wait(ctx)
-    if err != nil {
-        return nil, err
-    }
+	// wait for the limiter to allow the request
+	ctx := req.Context()
+	err := t.rl.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-    // make the HTTP request using the underlying transport
-    return t.rt.RoundTrip(req)
+	// make the HTTP request using the underlying transport
+	return t.rt.RoundTrip(req)
 }
